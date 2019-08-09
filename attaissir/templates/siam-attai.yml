@@ -1,0 +1,40 @@
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: siam-{{.Release.Name}}
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: siam-{{.Release.Name}}
+      annotations:
+        prometheus.io/scrape: 'true'
+    spec:
+      containers:
+      - name: siam-{{.Release.Name}}
+        image: siamreg.azurecr.io/siamapp:v3
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 80
+        env:
+        - name: TITLE
+          value: {{ .Values.title }}
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "1m"
+          limits:
+            memory: "256Mi"
+            cpu: "100m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.serviceName }}
+spec:
+  type: {{ .Values.serviceType }}
+  ports:
+  - port: 80
+  selector:
+    app: siam-{{.Release.Name}}

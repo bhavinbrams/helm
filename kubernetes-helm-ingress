@@ -1,0 +1,98 @@
+Step 1) First create aks master cluster.
+
+## change your resource group name and your cluster name.
+az aks get-credentials --resource-group anishaks --name attaissirprodaks
+
+Step 2) Create ingress name space
+kubectl create namespace ingress-basic
+
+Step 3) How to assign static ip address with nginx ingress controller.
+#get aks cluster resource group name througb below command.
+az aks show --resource-group anishaks --name attaissirprodaks --query nodeResourceGroup -o tsv
+
+#get the ip address value through below command.
+az network public-ip create --resource-group MC_anishaks_attaissirprodaks_westeurope --name myAKSPublicIP --allocation-method static --query publicIp.ipAddress -o tsv
+
+Step 4) configure roll back policy with helm.
+
+vim helm-rbac.yaml
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: tiller
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: tiller
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+  - kind: ServiceAccount
+    name: tiller
+    namespace: kube-system
+
+save and execute
+
+Step 6) execute rbac yaml file.
+
+kubectl create -f helm-rbac.yaml
+helm init --service-account tiller --node-selectors "beta.kubernetes.io/os"="linux"
+
+Step 7) configure ingress nginx with round robin 
+helm install stable/nginx-ingress \
+    --namespace ingress-basic \
+    --set controller.replicaCount=2 \
+    --set controller.nodeSelector."beta\.kubernetes\.io/os"=linux \
+    --set defaultBackend.nodeSelector."beta\.kubernetes\.io/os"=linux \
+    --set controller.service.loadBalancerIP="52.232.3.97"
+
+Step 8) command will give you ingress nginx ip address.
+kubectl get service -l app=nginx-ingress --namespace ingress-basic
+
+Step 9) Download helm chart through below url.
+wget https://github.com/Azure-Samples/helm-charts.git
+copy aks-helloworld directory from helm-charts 
+mv aks-helloworld/ attaissair					# replace attaissair with your project name.
+
+Step 10) modify Release.Name, image, replica parameter value.
+vim attaissair/templates/acs-helloworld.yaml
+
+Step 11) modify name parameter value.
+vim attaissair/Chart.yaml
+
+Step 12) modify serviceName parameter value.
+vim attaissair/values.yaml
+
+Step 13) modify title and serviceName value 			# serviceName value should be same as values.yaml 
+helm install --name bsm ./iot \
+    --namespace ingress-basic \
+    --set title="iotsiam" \
+    --set serviceName="siamappiot"
+
+Step 14) kubectl create -f siamapp.yml				# serviceName value should be same as values.yaml 
+vim siamapp.yml
+
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: siamappiot
+  namespace: ingress-basic
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/rewrite-target: /$1
+spec:
+  rules:
+  - http:
+      paths:
+      - backend:
+          serviceName: siamfront
+          servicePort: 80
+        path: /(.*)
+
+
